@@ -11,7 +11,7 @@ This is a unique plugin. First of all, it's different form other plugins that yo
 
 The other characteristics may not be unique, but it has all the features that a quiz plugin must have - it saves users' scores in database, timed quizzes, allows edit/delete quizzes, add/delete/edit questions in already created quizzes, see statistics for each quiz from admin menu for admins, etc.. 
 
-Also loading of each question is made with ajax, which makes ewverything very comfortable, fast and beautiful, and also secure (so no one can see the right answers with inspecting code element, which was present in some quiz plugins).
+Also loading of each question is made with ajax, which makes everything very comfortable, fast and beautiful, and also secure (so no one can see the right answers with inspecting code element, which was present in some quiz plugins).
 
 == Installation ==
 1. Upload the QuizLord folder to the /wp-content/plugins/ directory
