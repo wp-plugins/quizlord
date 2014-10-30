@@ -5,7 +5,7 @@ Plugin URI:
 Description: One Plugin to Rule Them All
 Author: Nahapet N.
 Author URI: 
-Version: 0.1
+Version: 1.0.1
 */
 session_start();
 function ql_create_database(){
