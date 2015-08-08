@@ -5,9 +5,36 @@ Plugin URI:
 Description: One Plugin to Rule Them All
 Author: Nahapet N.
 Author URI: 
-Version: 1.0.1
+Version: 2.0
 */
 session_start();
+
+function hex2rgba($color, $opacity = false) {
+ 
+	$default = 'rgb(0,0,0)';
+	if(empty($color))
+          return $default;
+        if ($color[0] == '#' ) {
+        	$color = substr( $color, 1 );
+        }
+        if (strlen($color) == 6) {
+                $hex = array( $color[0] . $color[1], $color[2] . $color[3], $color[4] . $color[5] );
+        } elseif ( strlen( $color ) == 3 ) {
+                $hex = array( $color[0] . $color[0], $color[1] . $color[1], $color[2] . $color[2] );
+        } else {
+                return $default;
+        }
+        $rgb =  array_map('hexdec', $hex);
+        if($opacity){
+        	if(abs($opacity) > 1)
+        		$opacity = 1.0;
+        	$output = 'rgba('.implode(",",$rgb).','.$opacity.')';
+        } else {
+        	$output = 'rgb('.implode(",",$rgb).')';
+        }
+        return $output;
+}
+
 function ql_create_database(){
 	global $wpdb;
 	
@@ -38,6 +65,25 @@ function ql_create_database(){
 	  PRIMARY KEY (`id`)
 	);";
 	
+	$ql_update_sql = "DELIMITER $$
+DROP PROCEDURE IF EXISTS upgrade_database_1_0_to_2_0 $$
+CREATE PROCEDURE upgrade_database_1_0_to_2_0()
+BEGIN
+
+	IF NOT EXISTS( (SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+    	AND COLUMN_NAME='date' AND TABLE_NAME='wp_ql_results') ) THEN
+	ALTER TABLE `wp_ql_results` ADD `date` int(10);
+	
+END IF;
+ALTER TABLE `wp_ql_quizzes` CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+ALTER TABLE `wp_ql_questions` CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+ALTER TABLE `wp_ql_answers` CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+ALTER TABLE `wp_ql_results` CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+END $$
+
+CALL upgrade_database_1_0_to_2_0() $$
+DELIMITER ;";
+
 	$ql_questions_sql = "CREATE TABLE IF NOT EXISTS `".$ql_questions_table."` (
 	  `id` int(14) NOT NULL AUTO_INCREMENT,
 	  `quiz_id` int(10) NOT NULL,
@@ -71,6 +117,7 @@ function ql_create_database(){
 	  `correctness_value` float NOT NULL,
 	  `points` int(15) NOT NULL,
 	  `completed` tinyint(4) NOT NULL,
+	  `date` int(10) NOT NULL,
 	  PRIMARY KEY (`id`)
 	);";
 	
@@ -78,13 +125,14 @@ function ql_create_database(){
 	$wpdb->query($ql_questions_sql);
 	$wpdb->query($ql_answers_sql);
 	$wpdb->query($ql_results_sql);
+	$wpdb->query($ql_update_sql);
 }
 
 register_activation_hook(__FILE__, 'ql_create_database');
 
 
 function ql_add_admin_menu(){
-	add_menu_page('QuizLord', 'QuizLord', 'manage_options', 'quizlord', 'ql_show_quizzes', '', 100);
+	add_menu_page('QuizLord', 'QuizLord', 'manage_options', 'quizlord', 'ql_show_quizzes', plugins_url('quizlord/styles/images/icon.png' ), 100);
 }
 
 add_action('admin_menu', 'ql_add_admin_menu');
@@ -97,6 +145,8 @@ function ql_load_scripts(){
 	wp_enqueue_style('jquery-ui', plugin_dir_url(__FILE__). 'styles/jquery-ui.min.css');
 	wp_enqueue_script('ql-js', plugin_dir_url(__FILE__). 'js/ql.js');
 	wp_enqueue_style('ql-css', plugin_dir_url(__FILE__). 'styles/style.css');
+	
+	wp_enqueue_script('ql-color', plugin_dir_url(__FILE__). 'js/jscolor.js');
 }
 
 add_action('admin_enqueue_scripts', 'ql_load_scripts');
@@ -148,7 +198,8 @@ function ql_show_quizzes(){
 	<td>Times taken</td>
 	<td>Average points</td>
 	<td>Average results</td>
-	<td>Shortcode</td></tr>
+	<td>Shortcode</td>
+	<td>Question count</td></tr>
 	
 	<?php
 	foreach($ql_quizzes as $qlq): ?>
@@ -157,7 +208,9 @@ function ql_show_quizzes(){
 	<td><?php echo $qlq->times_taken; ?></td>
 	<td><?php echo $qlq->avg_points; ?></td>
 	<td><?php echo round($qlq->avg_percent, 2)."%"; ?></td>
-	<td class="qlqid"><?php echo "[quizlord id=\"".$qlq->id."\"]"; ?></td></tr>
+	<td class="qlqid"><?php echo "[quizlord id=\"".$qlq->id."\"]"; ?></td>
+	<td><?php echo $wpdb->query($wpdb->prepare("select * from ".$wpdb->prefix."ql_questions where quiz_id = %d",  $qlq->id )); ?></td>
+	</tr>
 	<?php endforeach; ?>
 	</table>
 	<p><input type="submit" class="button-primary" name="elete" value="Delete"></p>
@@ -188,8 +241,8 @@ function ql_show_quizzes(){
 		<p><label for="numbmark">Numbering mark</label><br>
 		<input name="numbmark" id="numbmark" maxlength="1"></p>
 		
-		<p>Right color: <input type="color" name="rightcolor" id="rightcolor"></p>
-		<p>Wrong color: <input type="color" name="wrongcolor" id="wrongcolor"></p>
+		<p>Right color: <input class="color" name="rightcolor" id="rightcolor" value="00ff00"></p>
+		<p>Wrong color: <input class="color" name="wrongcolor" id="wrongcolor" value="ff0000"></p>
 		<p>Show type<br><select name="showtype" id="showtype">
 			<option value="paginated">Each question on its own page</option>
 			<option value="allonone">All questions on one page</option>
@@ -220,14 +273,18 @@ function ql_show_quizzes(){
 	//$ql_qtrow = $wpdb->get_row("select * from ".$wpdb->prefix."ql_questions where id = ".$_GET['questionid']);
 	$ql_intid = (int) $_GET['questionid'];
 	$ql_qtrow = $wpdb->get_row($wpdb->prepare("select * from ".$wpdb->prefix."ql_questions where id = %d", $ql_intid));
+	
+	$ql_quizintid = $ql_qtrow->quiz_id;
+	$ql_quizrow = $wpdb->get_row($wpdb->prepare("select * from ".$wpdb->prefix."ql_quizzes where id = %d", $ql_quizintid));
+	
 	$wpdb->query($wpdb->prepare("select * from ".$wpdb->prefix."ql_answers where question_id = %d", $ql_intid));
 	$ql_anscount = $wpdb->num_rows; ?>
 	<div id="tabs">
 	<ul>
 		<li><a href="#tabs-6">Show/Edit question</a></li>	
 	</ul>
-	<div id="#tabs-6">
-	<h2>Show/Edit question</h2>
+	<div id="tabs-6">
+	<h2>Show/Edit question</h2><h4><a href="<?php echo admin_url("admin.php?page=quizlord&id=$ql_quizintid"); ?>">← Back to quiz "<?php echo $ql_quizrow->name; ?>"</a></h4>
 	<form action="<?php echo admin_url('admin.php'); ?>" method="post">
 		<input type="hidden" name="action" value="ql_question_update">
 		<input type="hidden" name="questionid" value="<?php echo $_GET['questionid']; ?>">
@@ -286,7 +343,7 @@ function ql_show_quizzes(){
 	<div id="tabs-3">
 	
 	
-	<h2>Show questions</h2>
+	<h2><?php echo $ql_row->name; ?></h2><h4><a href="<?php echo admin_url('admin.php?page=quizlord'); ?>">← Back to quiz list</a></h4>
 	<form action="<?php echo admin_url('admin.php'); ?>" method="post">
 	<input type="hidden" name="action" value="ql_question_delete">
 	<table id="show" style="width: 800px;">
@@ -295,9 +352,9 @@ function ql_show_quizzes(){
 	<td>Points</td></tr>
 	<?php 
 	$ql_questions = $wpdb->get_results($wpdb->prepare("select * from ".$wpdb->prefix.
-	"ql_questions where quiz_id = %d", $ql_intid));
+	"ql_questions where quiz_id = %d order by `order`", $ql_intid));
 	foreach($ql_questions as $qlqt): ?>
-	<tr><td><input type="checkbox" name="del<?php echo $qlqt->id; ?>" id="del<?php echo $qlqt->id; ?>" value="<?php echo $qlqt->id; ?>"><?php echo $qlqt->order; ?></td><td><a href="<?php echo admin_url("admin.php?page=".$_GET["page"])."&questionid=".$qlqt->id; ?>"><?php echo strlen($qlqt->title) > 20 ? substr($qlqt->title, 0, 20)."..." : $qlqt->title; ?></a></td><td><a href="<?php echo admin_url("admin.php?page=".$_GET["page"])."&questionid=".$qlqt->id; ?>"><?php echo strlen($qlqt->text) > 20 ? substr($qlqt->text, 0, 20)."..." : $qlqt->text; ?></a></td><td><?php echo $qlqt->points; ?></td></tr>
+	<tr><td><input type="checkbox" name="del<?php echo $qlqt->id; ?>" id="del<?php echo $qlqt->id; ?>" value="<?php echo $qlqt->id; ?>"><?php echo $qlqt->order; ?></td><td><a href="<?php echo admin_url("admin.php?page=".$_GET["page"])."&questionid=".$qlqt->id; ?>"><?php echo strlen($qlqt->title) > 35 ? substr($qlqt->title, 0, 35)."..." : $qlqt->title; ?></a></td><td><a href="<?php echo admin_url("admin.php?page=".$_GET["page"])."&questionid=".$qlqt->id; ?>"><?php echo strlen($qlqt->text) > 35 ? substr($qlqt->text, 0, 35)."..." : $qlqt->text; ?></a></td><td><?php echo $qlqt->points; ?></td></tr>
 	<?php endforeach; ?>
 	</table>
 	<p><input type="submit" class="button-primary" name="elete" value="Delete"></p>
@@ -364,8 +421,8 @@ function ql_show_quizzes(){
 		<p><label for="numbmark">Numbering mark</label><br>
 		<input name="numbmark" id="numbmark" maxlength="1"  value="<?php echo $ql_row->numbering_mark; ?>"></p>
 		
-		<p>Right color: <input type="color" name="rightcolor" id="rightcolor"></p>
-		<p>Wrong color: <input type="color" name="wrongcolor" id="wrongcolor"></p>
+		<p>Right color: <input class="color" name="rightcolor" id="rightcolor" value="<?php echo substr($ql_row->right_color, 1); ?>"></p>
+		<p>Wrong color: <input class="color" name="wrongcolor" id="wrongcolor" value="<?php echo substr($ql_row->wrong_color, 1); ?>"></p>
 		<p>Show type<br><select name="showtype" id="showtype">
 			<option value="paginated">Each question on its own page</option>
 			<option value="allonone">All questions on one page</option>
@@ -400,8 +457,8 @@ function ql_insert_quiz_data(){
 		$ql_title = $_POST['title'];
 		$ql_description = $_POST['description'];
 		$ql_time = $_POST['time'];
-		$ql_rightcolor = $_POST['rightcolor'];
-		$ql_wrongcolor = $_POST['wrongcolor'];
+		$ql_rightcolor = "#".$_POST['rightcolor'];
+		$ql_wrongcolor = "#".$_POST['wrongcolor'];
 		$ql_numbtype = $_POST['numbtype'];
 		$ql_numbmark = $_POST['numbmark'];
 		$ql_showtype = $_POST['showtype'];
@@ -445,8 +502,8 @@ function ql_update_quiz_data(){
 		$ql_title = $_POST['title'];
 		$ql_description = $_POST['description'];
 		$ql_time = $_POST['time'];
-		$ql_rightcolor = $_POST['rightcolor'];
-		$ql_wrongcolor = $_POST['wrongcolor'];
+		$ql_rightcolor = "#".$_POST['rightcolor'];
+		$ql_wrongcolor = "#".$_POST['wrongcolor'];
 		$ql_numbtype = $_POST['numbtype'];
 		$ql_numbmark = $_POST['numbmark'];
 		$ql_showtype = $_POST['showtype'];
@@ -548,9 +605,9 @@ function ql_update_question_data(){
 		$ql_order = $ql_order = $_POST['order'];
 		$ql_quizid = $_POST['quizid'];
 		$ql_title = $_POST['title'];
-		$ql_text = $_POST['text'];
-		$ql_rightmsg = $_POST['rightmsg'];
-		$ql_wrongmsg = $_POST['wrongmsg'];
+		$ql_text = stripslashes($_POST['text']);
+		$ql_rightmsg = stripslashes($_POST['rightmsg']);
+		$ql_wrongmsg = stripslashes($_POST['wrongmsg']);
 		$ql_ansrand = isset($_POST['ansrand']) ? 1 : 0;
 		$ql_anstype = $_POST['anstype'];
 		$ql_points = $_POST['points'];
@@ -637,9 +694,15 @@ function ql_delete_question(){
 			$ql_del_ids[] = (int) $val;
 		}
 	}
+	
+	$ql_quizid = $_POST['quizid'];
+	
 	foreach($ql_del_ids as $qld){
+		$qlord = $wpdb->get_var($wpdb->prepare("select `order` from ".$wpdb->prefix."ql_questions where id = %d", $qld));
+		
 		$wpdb->query($wpdb->prepare("delete from ".$wpdb->prefix."ql_questions where id = %d", $qld));
-		$wpdb->query($wpdb->prepare("update ".$wpdb->prefix."ql_questions set `order` = `order` - 1 where id > %s", $qld));
+		$wpdb->query($wpdb->prepare("update ".$wpdb->prefix."ql_questions set `order` = `order` - 1 
+		where `order` > %s and quiz_id = $ql_quizid", $qlord));
 		$wpdb->query($wpdb->prepare("delete from ".$wpdb->prefix."ql_answers where question_id = %d", $qld));
 		$wpdb->query($wpdb->prepare("delete from ".$wpdb->prefix."ql_results where question_id = %d", $qld));
 	}	
@@ -747,6 +810,7 @@ function ql_custom_shortcode($atts) {
 		ob_start(); ?>
 		<div class="ql-question">
 		<h3 class="ql-name"><?php echo stripslashes($ql_quiz->name); ?></h3>
+		<h3 class="ql-number"><?php echo "Question $ql_order of ".count($ql_all_questions); ?></h3>
 		<?php if(is_singular() || $_POST['singul'] == 'is_single'): ?>
 		<h5 class="ql-text"><?php echo stripslashes($ql_current_question->text); ?></h5>
 		<form action="" method="POST" id="ql-start">
@@ -755,7 +819,8 @@ function ql_custom_shortcode($atts) {
 			<input type="hidden" name="order" 
 			value="<?php echo /*($ql_quiz->random == 0) ?*/ $ql_order+1 /*: rand(1, count($ql_all_questions)-1)*/; ?>">
 			<input type="hidden" name="number" value="<?php echo $ql_question_number + 1; ?>">
-			<input type="hidden" name="skip" value="<?php echo $ql_quiz->skip; ?>" id="skip">
+			<input type="hidden" name="skip" value="<?php echo $ql_quiz->skip; ?>" id="skip">			
+			<input type="hidden" name="checkcnt" value="<?php echo $ql_quiz->check_continue; ?>" id="checkcnt">
 			<input type="hidden" name="qlo" value="<?php echo $ql_current_question->id; ?>">
 			<?php $i = 1;
 			foreach($ql_current_question_options as $qcqo){
@@ -764,6 +829,31 @@ function ql_custom_shortcode($atts) {
 						echo "<p class='ql-option'><input type='radio' name='qlo$ql_current_question->id' 
 						id='c$qcqo->id' class='qlo' value='$qcqo->order'>";
 					}
+					if(isset($_POST['send']) && $_POST['send'] == 'Check'){
+			
+						//foreach($ql_right_answers_order2 as $qrao){
+						$ql_right_answers3 = $ql_right_answers_order2[0]->order;
+						//}
+						$ql_user_answers3 = ql_arraytostr( $_POST['qlo'.$ql_prev_id]);
+						$ql_correctness_value2 = (trim($ql_right_answers3) == trim($ql_user_answers3));
+						if($ql_correctness_value2 == 1){
+							if($i == $ql_right_answers3){
+								$coll = hex2rgba($ql_quiz->right_color, 0.5);
+								echo "<p style='background: $coll;padding: 5px;margin-bottom: 5px;'>";
+							}
+						}
+						else{
+							if($i == $ql_user_answers3){
+								$coll = hex2rgba($ql_quiz->wrong_color, 0.5);
+								echo "<p style='background: $coll;padding: 5px;margin-bottom: 5px;'>";
+							}
+							if($i == $ql_right_answers3){
+								$coll = hex2rgba($ql_quiz->right_color, 0.5);
+								echo "<p style='background: $coll;padding: 5px;margin-bottom: 5px;'>";
+							}
+						}
+					}
+					
 				}
 				else{
 					if($ql_quiz->check_continue != 1 || $_POST['send'] != 'Check'){
@@ -771,7 +861,10 @@ function ql_custom_shortcode($atts) {
 					 	id='c$qcqo->id' class='qlo' value='$qcqo->order'>";
 					}
 				}
-				echo "<label for='c$qcqo->id'>";
+				if(!(isset($_POST['send']) && $_POST['send'] == 'Check')){
+				echo "<label for='c$qcqo->id'>";}else{
+					echo "<label for='c$qcqo->id' style='display:block'>";
+				}
 				if ($ql_quiz->numbering_type == 'numerical') echo $i.$ql_quiz->numbering_mark." ";
 				if ($ql_quiz->numbering_type == 'alphabetical') echo $ql_alphabet[$i].$ql_quiz->numbering_mark." "; 
 				echo $qcqo->text."</label></p>";
@@ -791,7 +884,7 @@ function ql_custom_shortcode($atts) {
 			<input type="submit" name="next" value="Next" id="next" class="ql-btn">
 			<?php endif; ?>
 				<?php if($ql_quiz->back_button == 1 && $ql_question_number > 1): ?>
-				<input type="submit" name="back" value="Back" id="back" class="ql-btn">
+				<br><input type="submit" name="back" value="Back" id="back" class="ql-btn">
 				<?php endif; ?>
 			<?php else: if($ql_quiz->check_continue != 1 || $_POST['send'] == 'Check'): ?>
 			<input type="submit" name="finish" value="Finish" id="finish" class="ql-btn">
@@ -810,13 +903,13 @@ function ql_custom_shortcode($atts) {
 			$ql_correctness_value2 = (trim($ql_right_answers2) == trim($ql_user_answers2));
 			
 			if($ql_user_answers2 == ''){
-				echo "<p style='color: blue'>No answer selected!</p>";
+				echo "<div style='color: blue'>No answer selected!</div>";
 			}
 			elseif($ql_correctness_value2 == true){
-				echo "<p style='color: $ql_quiz->right_color'>Correct<br>$ql_current_question->right_message</p>";
+				echo "<div style='color: $ql_quiz->right_color'>Correct<br>$ql_current_question->right_message</div>";
 			}
 			else{
-				echo "<p style='color: $ql_quiz->wrong_color'>Incorrect<br>$ql_current_question->wrong_message</p>";
+				echo "<div style='color: $ql_quiz->wrong_color'>Incorrect<br>$ql_current_question->wrong_message</div>";
 			}
 		} ?>
 		</div> 
@@ -848,6 +941,8 @@ function ql_custom_shortcode($atts) {
 		endif;
 		if($ql_question_number > 1 && $_POST['send'] != 'Check' && $ql_question_number > 1 
 		&& $_POST['send'] != 'Back' && $_POST['send'] != 'Resume'):
+			$ql_date = time();
+			//var_dump($ql_date);
 			$wpdb->insert($wpdb->prefix.'ql_results',
 				array(
 					'user_id' => $ql_userid,
@@ -857,7 +952,8 @@ function ql_custom_shortcode($atts) {
 					'right_answer_numbers' => trim($ql_right_answers),
 					'correctness_value' => $ql_correctness_value,
 					'points' => $_SESSION['ql_points'],
-					'completed' => $ql_completed
+					'completed' => $ql_completed,
+					'date' => $ql_date
 				));
 		endif;
 		endif;
@@ -912,11 +1008,11 @@ function ql_custom_shortcode($atts) {
 				where question_id = %d  and user_id = %d order by id desc limit 1", $qlaq->id, $ql_userid));
 				echo "<div class='ql-fsingle'><h5 class='ql-text'>".stripslashes($qlaq->text)."</h5>";
 				if($ql_correct == 1){
-					echo "<p style='color: $ql_quiz->right_color'>Right</p></div>";
+					echo "<p style='color: $ql_quiz->right_color'>Right</p><p style='color: $ql_quiz->right_color'>$qlaq->right_message</p></div>";
 				}
 				elseif($ql_correct == 0){
 					echo "<p style='color: $ql_quiz->wrong_color'>Wrong</p><span style='color: $ql_quiz->wrong_color'><strike>$ql_user_num</strike>
-					</span><span style='color: $ql_quiz->right_color'>$ql_right_num</span></p></div>";
+					</span><span style='color: $ql_quiz->right_color'>$ql_right_num</span></p><p style='color: $ql_quiz->wrong_color'>$qlaq->wrong_message</p></div>";
 				}
 				else{
 					echo "<p style='color: blue'>Not answered</p></div>";
@@ -1048,13 +1144,13 @@ function ql_custom_shortcode($atts) {
 			 where question_id = %d  and user_id = %d order by id desc limit 1", $qlaq->id, $ql_userid));
 			
 			if($ql_correct == 1){
-				echo "<p style='color: $ql_quiz->right_color'>Correct<br>".$qlaq->right_message."</p></div>";
+				echo "<div style='color: $ql_quiz->right_color'>Correct<br>".$qlaq->right_message."</div></div>";
 			}
 			elseif($ql_correct == 0){
-				echo "<p><span style='color: $ql_quiz->wrong_color'><strike>$ql_user_num</strike></span><span style='color: $ql_quiz->right_color'>$ql_right_num</span></p><p style='color: $ql_quiz->wrong_color'>Incorrect<br>".$qlaq->wrong_message."</p></div>";
+				echo "<div><span style='color: $ql_quiz->wrong_color'><strike>$ql_user_num</strike></span><span style='color: $ql_quiz->right_color'>$ql_right_num</span></p><p style='color: $ql_quiz->wrong_color'>Incorrect<br>".$qlaq->wrong_message."</div></div>";
 			}
 			else{
-				echo "<p style='color: blue'>Not answered</p></div>";
+				echo "<div style='color: blue'>Not answered</div></div>";
 			}
 		}
 		echo "<a href=''><input type='button' name='submit' class='next' id='restart' value='Restart quiz'></a></div>";
@@ -1065,10 +1161,3 @@ function ql_custom_shortcode($atts) {
 add_shortcode('quizlord', 'ql_custom_shortcode');
 add_action('wp_ajax_ql_custom_shortcode', 'ql_custom_shortcode');
 add_action('wp_ajax_nopriv_ql_custom_shortcode', 'ql_custom_shortcode');
-
-
-
-
-
-
-
