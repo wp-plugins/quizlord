@@ -3,7 +3,8 @@ jQuery(document).ready(function($){
 	$(document).on('click', '#start, #next, #finish, #back, #resume, #check', function(){
 		//$(this).action = 'ql_custom_shortcode';
 		var ql_skip = $(this).parent().find("#skip").val();
-		if(typeof $(".qlo:checked").val() != 'undefined' || $(this).attr('name') == 'start' || $(this).attr('name') == 'resume' || $(this).attr('name') == 'back' || ql_skip == 1){
+		var ql_checkcnt = $(this).parent().find("#checkcnt").val();
+		if(typeof $(".qlo:checked").val() != 'undefined' || $(this).attr('name') == 'start' || $(this).attr('name') == 'resume' || $(this).attr('name') == 'back' || ql_skip == 1 || (ql_checkcnt == 1 && ($(this).attr('name') == 'next' || $(this).attr('name') == 'finish'))){
 			$.ajax({
 				type: "POST",
 				url: MyAjax.ajaxurl,
@@ -16,7 +17,7 @@ jQuery(document).ready(function($){
 				},
 			});
 		}
-		else{
+		else if($(this).attr('name') == 'check'){
 			alert("Please check correct answer!");
 		}
 		return false;
