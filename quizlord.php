@@ -3,8 +3,8 @@
 Plugin Name: QuizLord
 Plugin URI: 
 Description: One Plugin to Rule Them All
-Author: Nahapet N.
-Author URI: 
+Author: Nahapet N. (VMS Studio)
+Author URI: http://www.vms-studio.com/
 Version: 2.0
 */
 session_start();
