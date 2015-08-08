@@ -1,7 +1,7 @@
 === Quizlord ===
 Contributors: Nahapet Nahapetyan
 Tags: quiz, quizzes, tests, questions
-Tested up to: 4.0
+Tested up to: 4.2.4
 Stable tag: trunk
 
 This is a plugin that allows users to create quizzes and answer to questions, see their scores and so on...
