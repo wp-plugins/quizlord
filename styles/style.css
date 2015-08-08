@@ -6,15 +6,18 @@ input, select{
 	height: 30px;
 }
 
-#tabs-1 a, #tabs-3 a{
+#tabs-1 a, #tabs-3 a, #tabs-6 a{
 	color: #0074a2!important;
 	text-decoration: none;
 }
 
-#tabs-1 a:hover, #tabs-3 a:hover{
+#tabs-1 a:hover, #tabs-3 a:hover, #tabs-6 a:hover{
 	color: #2ea2cc!important;
-} 
-#start, #resume, #next, #back, #check, #finish, #restart{
+}
+#adminmenu .wp-menu-image img{
+	margin-top: -4px;
+}
+#start, #ql-start #resume, #next, #back, #check, #finish, #restart{
 border-radius: 10px;
 border: 1px solid black;
 }
@@ -93,4 +96,16 @@ input[type="submit"], input[type="button"]{
 
 #show tr:nth-child(2n+1){
 	background-color:#f8f8f8;
+}
+
+#show td{
+	padding: 10px;
+}
+
+#show td:first-of-type{
+	width: 65px;
+}
+
+#show .qlqid{
+	width: 150px;
 }
