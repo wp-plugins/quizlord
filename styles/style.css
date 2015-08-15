@@ -5,7 +5,17 @@ input, select, textarea{
 input, select{
 	height: 30px;
 }
-
+#toplevel_page_quizlord .wp-menu-image{
+	background-image: url(images/icon.png)!important;
+	background-repeat: no-repeat;
+	background-position: 6px 6px;
+}
+#toplevel_page_quizlord:hover .wp-menu-image{
+	background-position: 6px -31px;
+}
+#toplevel_page_quizlord.current .wp-menu-image{
+	background-position: 6px -66px;
+}
 #tabs-1 a, #tabs-3 a, #tabs-6 a{
 	color: #0074a2!important;
 	text-decoration: none;

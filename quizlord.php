@@ -132,7 +132,7 @@ register_activation_hook(__FILE__, 'ql_create_database');
 
 
 function ql_add_admin_menu(){
-	add_menu_page('QuizLord', 'QuizLord', 'manage_options', 'quizlord', 'ql_show_quizzes', plugins_url('quizlord/styles/images/icon.png' ), 100);
+	add_menu_page('QuizLord', 'QuizLord', 'manage_options', 'quizlord', 'ql_show_quizzes', 'none'/*plugins_url('quizlord/styles/images/icon.png' )*/, 100);
 }
 
 add_action('admin_menu', 'ql_add_admin_menu');
